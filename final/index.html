@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SONG - Reforged</title>
+    <style>
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-image: 
+                linear-gradient(#2a2d37 1px, transparent 1px),
+                linear-gradient(90deg, #2a2d37 1px, transparent 1px),
+                radial-gradient(circle at 50% 50%, rgba(255, 180, 50, 0.15), rgba(10, 10, 12, 0.8));
+            background-size: 40px 40px, 40px 40px, 100% 100%;
+            box-shadow: inset 0 0 50px #000;
+            height: 100vh;
+            color: white; font-family: "Trebuchet MS", sans-serif;
+            transition: background 1s, box-shadow 1s;
+        }
+        button { cursor: pointer; border-radius: 4px; border: 1px solid #555; background: #333; color: white; padding: 5px 10px; transition: background 0.2s; }
+        button:hover { background: #555; }
+        button:disabled { background: #111; color: #555; cursor: not-allowed; }
+        
+        .title { font-size: 50px; color: #fff; text-align: center; margin-top: 10%; text-shadow: 2px 2px 5px #000; }
+        .start_bt { font-size: 30px; position: absolute; left: 50%; transform: translateX(-50%); bottom: 20%; padding: 10px 40px; }
+        
+        /* Menu / Upgrade UI */
+        #menu { display: none; width: 100%; height: 100vh; position: relative; }
+        #upgrade_panel { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 50px; }
+        .upgrade-card { background: rgba(0,0,0,0.7); padding: 15px; border: 1px solid #777; width: 220px; text-align: center; border-radius: 8px; }
+        .upgrade-card button { display: block; width: 100%; margin-top: 8px; padding: 8px; }
+        
+        /* Battle UI */
+        #battle { display: none; height: 100vh; flex-direction: column; align-items: center; justify-content: center; position: relative;}
+        #top_bar { width: 75%; display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; margin-bottom: 10px; }
+        #board { display: grid; gap: 4px; background: #c2c2c2; width: 75%; max-height: 60vh; position: relative; padding: 4px; border-radius: 4px;}
+        .cell { aspect-ratio: 1/1; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #444; position: relative; cursor: pointer; }
+        .cell:hover { background: #555; }
+        
+        #char_cards { display: flex; gap: 10px; margin-top: 15px; width: 75%; overflow-x: auto; padding: 10px; background: rgba(0,0,0,0.5); border-radius: 4px; }
+        .char_card { width: 5em; height: 5em; background: #222; flex-shrink: 0; border-radius: 4px; border: 2px solid transparent; }
+        .char_card:hover { border-color: #44a641; }
+        
+        /* Units & Animations */
+        .unit-container { display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%; justify-content: center; pointer-events: none;}
+        .unit-svg { width: 70%; height: 70%; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.8)); }
+        
+        .hp-bar-bg { width: 80%; height: 6px; background: #000; margin-top: 4px; border: 1px solid #222; border-radius: 3px; overflow: hidden; }
+        .hp-bar-fill { height: 100%; transition: width 0.3s, background 0.3s; }
+        
+        @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(4px);} 75% {transform: translateX(-4px);} }
+        .anim-atk { animation: shake 0.15s ease-in-out 2; }
+        .anim-dmg { filter: brightness(2) drop-shadow(0 0 8px red); }
+        
+        /* Laser path animations */
+        .anim-laser-right::after {
+            content: ""; position: absolute; top: 50%; left: -4px; width: calc(100% + 8px); height: 4px; 
+            background: #ffcc00; transform: translateY(-50%); box-shadow: 0 0 10px #ffcc00; z-index: 10;
+        }
+        .anim-laser-left::after {
+            content: ""; position: absolute; top: 50%; left: -4px; width: calc(100% + 8px); height: 4px; 
+            background: #ff3366; transform: translateY(-50%); box-shadow: 0 0 10px #ff3366; z-index: 10;
+        }
+
+        /* Overlays & Dialogues */
+        #overlay, #dialogue_overlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; z-index: 100; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px;}
+        #overlay { background: rgba(0,0,0,0.9); transition: background 2s ease, color 2s ease; }
+        #dialogue_overlay { background: rgba(0,0,0,0.85); flex-direction: row; gap: 40px; padding: 10%; box-sizing: border-box; }
+        
+        #speaker_portrait { width: 150px; height: 150px; background: #222; border-radius: 10px; padding: 10px; border: 3px solid #555; }
+        #dialogue_box { flex: 1; text-align: left; background: rgba(30,30,40,0.9); padding: 30px; border-radius: 10px; border: 2px solid #555; position: relative; min-height: 120px; }
+        #dialogue_text { font-size: 24px; white-space: pre-wrap; line-height: 1.5; }
+        #btn_next_dialogue { position: absolute; bottom: 15px; right: 20px; font-size: 18px; display: none; background: #44a641; }
+        
+        .sunrise-overlay { background: linear-gradient(to top, #ff7e5f, #feb47b) !important; color: #111 !important; text-shadow: none !important;}
+    </style>
+</head>
+<body id="body">
+    <!-- START SCREEN -->
+    <div id="start">
+        <div class="title">PONIES' SONG</div>
+        <button class="start_bt" onclick="start_game()"> - START - </button>
+    </div>
+
+    <!-- MENU & UPGRADE SCREEN -->
+    <div id="menu">
+        <div style="text-align: center; margin-top: 20px;">
+            <h2 id="menu_title">Resistance Camp</h2>
+            <div style="font-size: 24px; color: #ffcc00; font-weight: bold;">Supply Points (SP): <span id="ui_sp">0</span></div>
+        </div>
+        <div id="upgrade_panel"></div>
+        <div style="position: absolute; bottom: 10%; width: 100%; text-align: center;">
+            <button id="btn_next_battle" onclick="start_battle()" style="font-size: 24px; padding: 15px 40px; background: #1d349b; font-weight: bold;">DEPLOY TO NEXT SECTOR ></button>
+        </div>
+    </div>
+
+    <!-- BATTLE SCREEN -->
+    <div id="battle">
+        <div id="top_bar">
+            <div>Command Points (CP): <span id="ui_cp" style="color: #44a641;">10</span></div>
+            <div>Level: <span id="ui_lvl">1</span>/13</div>
+            <button onclick="end_turn()" style="font-size: 18px; font-weight: bold; padding: 5px 20px;">End Turn</button>
+        </div>
+        <div id="board"></div>
+        <div id="char_cards"></div>
+    </div>
+
+    <!-- STORY DIALOGUE OVERLAY -->
+    <div id="dialogue_overlay">
+        <div id="speaker_portrait"></div>
+        <div id="dialogue_box">
+            <div id="dialogue_text"></div>
+            <button id="btn_next_dialogue" onclick="next_dialogue_click()">Next ▸</button>
+        </div>
+    </div>
+
+    <!-- EVENT/ENDING OVERLAY -->
+    <div id="overlay">
+        <div id="story_text" style="font-size: 26px; white-space: pre-wrap; margin-bottom: 30px; max-width: 800px; line-height: 1.4; font-weight: bold;"></div>
+        <div id="event_buttons" style="display: none; gap: 20px;"></div>
+    </div>
+
+<script defer>
+// --- CORE DATA & LORE ---
+let current_level = 0;
+let SP = 0; 
+let CP = 10; 
+
+const t=10;
+// Full English translation of backgrounds and skills
+var data = [
+    { type:"tile", color:["#ccc"], desc:"" },
+    { id:"1", name:"Peri", type:"friend", hp:100, attack:20, avaliable:1, on_board:0, color:["#595959","#000","#ccc"], desc:"[Lore] A resilient earth pony, leader of the resistance.\n[Skill] Balanced stats, reliable frontline." },
+    { id:"2", name:"Blue the Deep", type:"friend", hp:140, attack:12, avaliable:1, on_board:0, color:["#1d349b","#000","#fff"], desc:"[Lore] A former miner with immense strength.\n[Skill] Heavy tank with extremely high base HP." },
+    { id:"3", name:"Kim Dash", type:"friend", hp:80, attack:22, avaliable:1, on_board:0, color:["#fc0","#006f10","#297aac"], desc:"[Lore] Retired pegasus veteran.\n[Skill] Assassin, high attack damage but fragile." },
+    { id:"4", name:"Leafy Green", type:"friend", hp:75, attack:10, avaliable:1, on_board:0, color:["#4a6b4e","#0072ff","#44a641"], desc:"[Lore] Support pony tied to earth magic.\n[Skill] Reliable sustained damage." },
+    { id:"5", name:"Radishy Pie", type:"friend", hp:60, attack:15, avaliable:0, on_board:0, color:["#aaa","#000","#555"], desc:"[Lore] Defected unicorn-faction cannon fodder.\n[Skill] Fast attack tempo." },
+    
+    { id:"6", name:"Unicorn Guard", type:"enemy", hp:35, attack:10, color:["#000","#f0f","#f0f"], desc:"[Lore] Low-tier unicorn guard.\n[Skill] Basic melee unit." },
+    { id:"7", name:"Crystal Sniper", type:"enemy", hp:25, attack:15, color:["#000","#fa0","#fa0"], desc:"[Lore] Sniper equipped with magic crystals.\n[Skill] Long range, high damage, low HP." },
+    { id:"8", name:"Armored Elite", type:"enemy", hp:65, attack:20, color:["#f0f","#000","#000"], desc:"[Lore] Heavily armored unicorn elite.\n[Skill] High armor and highly threatening damage." },
+    { id:"9", name:"Glovy Shatter (BOSS)", type:"enemy", hp:300, attack:35, color:["#fff","#a900ff","#0004ff"], desc:"[Lore] The Oppressor, tyrant of the Unicorn Council.\n[Skill] Horrifying HP and devastating blows." },
+    { type:"tile", color:["#000"], desc:"" }
+];
+
+data.forEach(d => { if(d.hp) d.max_hp = d.hp; }); 
+
+// Generator for 13 levels - Boss map is strictly index 12 with a single Boss
+let maps = [];
+for(let i=0; i<13; i++) {
+    if(i === 0) maps.push([ [0,0,0,0,0,6,0], [0,0,0,t,0,0,7], [0,0,0,0,0,0,0] ]);
+    else if(i === 12) maps.push([ [0,0,0,0,8,0,0], [0,0,0,0,0,9,0], [0,0,0,0,8,0,0] ]); 
+    else {
+        let row1 = [0,0,0,0, 0, (i>3?7:0), (i>7?8:6)];
+        let row2 = [0,0,0,0, t, (i>5?6:0), (i%2==0?6:7)];
+        let row3 = [0,0,0,0, 0, (i>9?8:0), 6];
+        maps.push([row1, row2, row3]);
+    }
+}
+let current_map = [];
+
+// English Story Dialogues per level
+const dialogues = {
+    0: ["We survived their first wave. Good job, everyone.", "The unicorn army is more fragile than we thought, but this is just the beginning."],
+    2: ["The front line is pushing forward!", "Watch out for those crystal snipers in the back. Shield the others!"],
+    5: ["The fortress ahead is their main supply hub.", "Take it down, and we can finally restock our supplies."],
+    8: ["Armored Elites are deploying. They're getting desperate.", "Focus your fire, don't let them close in!"],
+    11: ["This is it...", "Past these gates lies Glovy Shatter. Prepare yourselves, friends!"]
+};
+
+// DOM Tools
+const el = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// --- GRAPHICS (SVG REWRITE) ---
+const friend_sheet = ["000000001","000000000111","0000000001211","0000000031111","000000003111","000000033111","000111111111","001111111111","010111111111","100110000011","000110000011","000110000011","000110000011"];
+const enemy_sheet = ["000003","00000301","0000111","0011121","00111113","00001113","000011111111","0000111111111","00001111111111","000011111111101","0000110000011001","0000110000011","0000110000011","0000110000011","0000110000011"];
+
+function render_unit(data_item) {
+    if (data_item.type === "tile" || !data_item.type) return "";
+    let colors = data_item.color;
+    
+    // Boss will now properly use the enemy_sheet (facing left) instead of friend_sheet
+    let sprite = data_item.type === "friend" ? friend_sheet : enemy_sheet;
+    
+    let w = Math.max(...sprite.map(r => r.length));
+    let h = sprite.length;
+    let rects = "";
+    
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < sprite[y].length; x++) {
+            let c = sprite[y][x];
+            if (c !== '0') rects += `<rect x="${x}" y="${y}" width="1.1" height="1.1" fill="${colors[Number(c)-1]}" />`;
+        }
+    }
+    
+    let hp_pct = Math.max(0, (data_item.hp / data_item.max_hp) * 100);
+    let hp_color = hp_pct > 50 ? '#44a641' : (hp_pct > 20 ? '#fa0' : '#f00');
+    if (data_item.type === 'enemy') hp_color = '#ff3366';
+    
+    return `
+    <div class="unit-container">
+        <svg class="unit-svg" viewBox="0 0 ${w} ${h}">
+            ${rects}
+        </svg>
+        <div class="hp-bar-bg"><div class="hp-bar-fill" style="width:${hp_pct}%; background:${hp_color};"></div></div>
+    </div>`;
+}
+
+function get_tooltip(d) {
+    if(!d || d.type === "tile") return "";
+    return `[${d.name}]\nHP: ${d.hp} / ${d.max_hp}\nATK: ${d.attack}\n\n${d.desc}`;
+}
+
+// --- STORY & DIALOGUE LOGIC ---
+let resolve_click;
+function wait_for_click() {
+    el('btn_next_dialogue').style.display = 'inline-block';
+    return new Promise(r => { resolve_click = r; });
+}
+window.next_dialogue_click = function() {
+    el('btn_next_dialogue').style.display = 'none';
+    if(resolve_click) resolve_click();
+}
+
+async function play_dialogue(lines) {
+    el('dialogue_overlay').style.display = 'flex';
+    el('battle').style.display = 'none';
+    el('menu').style.display = 'none';
+    
+    el('speaker_portrait').innerHTML = render_unit(data.find(d => d.id === "1"));
+
+    for(let line of lines) {
+        el('dialogue_text').innerHTML = "";
+        for(let char of line) {
+            el('dialogue_text').innerHTML += char;
+            await sleep(30);
+        }
+        await wait_for_click();
+    }
+    el('dialogue_overlay').style.display = 'none';
+}
+
+// --- GAME FLOW ---
+async function start_game() {
+    el('start').style.display = 'none';
+    await play_dialogue(["The Unicorns have ruled this land with magic for too long...", "Normal ponies are trampled as mere pawns.", "It's time to take back our plains!"]);
+    show_menu();
+}
+
+function show_menu() {
+    el('battle').style.display = 'none';
+    el('overlay').style.display = 'none';
+    el('dialogue_overlay').style.display = 'none';
+    el('menu').style.display = 'block';
+    el('ui_sp').innerText = SP;
+    el('btn_next_battle').innerText = `DEPLOY TO LEVEL ${current_level + 1} >`;
+    
+    let upg = el('upgrade_panel');
+    upg.innerHTML = "";
+    data.filter(d => d.type === "friend" && d.avaliable).forEach(char => {
+        upg.innerHTML += `
+        <div class="upgrade-card">
+            <h3 style="margin:5px 0;">${char.name}</h3>
+            <div style="font-size:14px; margin-bottom:10px;">HP: ${char.hp}/${char.max_hp} | ATK: ${char.attack}</div>
+            <button onclick="upgrade('${char.id}', 'heal')" ${SP<2?'disabled':''}>Heal (2 SP)</button>
+            <button onclick="upgrade('${char.id}', 'atk')" ${SP<4?'disabled':''}>+5 ATK (4 SP)</button>
+            <button onclick="upgrade('${char.id}', 'maxhp')" ${SP<6?'disabled':''}>+20 Max HP (6 SP)</button>
+        </div>`;
+    });
+}
+
+window.upgrade = function(id, type) {
+    let char = data.find(d => d.id === id);
+    if(type === 'heal' && SP >= 2) { SP -= 2; char.hp = char.max_hp; }
+    if(type === 'atk' && SP >= 4) { SP -= 4; char.attack += 5; }
+    if(type === 'maxhp' && SP >= 6) { SP -= 6; char.max_hp += 20; char.hp += 20; }
+    show_menu();
+}
+
+function start_battle() {
+    CP = 10;
+    el('menu').style.display = 'none';
+    el('battle').style.display = 'flex';
+    el('ui_lvl').innerText = current_level + 1;
+    
+    let template = maps[current_level];
+    current_map = [];
+    for(let y=0; y<template.length; y++) {
+        current_map[y] = [];
+        for(let x=0; x<template[y].length; x++) {
+            let rawData = data[template[y][x]];
+            
+            if(rawData.type === 'enemy') {
+                let enemy = JSON.parse(JSON.stringify(rawData));
+                
+                // Enemy Progression Scaling: +15% stats per level (Boss scales at +5% to remain fair)
+                let scale_factor = enemy.id === "9" ? 1 + (current_level * 0.04) : 1 + (current_level * 0.09);
+                enemy.max_hp = Math.floor(enemy.max_hp * scale_factor);
+                enemy.hp = enemy.max_hp;
+                enemy.attack = Math.floor(enemy.attack * scale_factor);
+                
+                current_map[y][x] = enemy;
+            } else {
+                current_map[y][x] = rawData;
+            }
+        }
+    }
+    data.forEach(d => { if(d.type === 'friend') d.on_board = 0; });
+    update_grid();
+    put_cards();
+}
+
+function update_cp(amount) {
+    CP += amount;
+    el('ui_cp').innerText = CP;
+}
+
+function update_grid() {
+    let b = el('board');
+    b.innerHTML = "";
+    b.style.gridTemplateColumns = `repeat(${current_map[0].length}, minmax(0,1fr))`;
+    b.style.gridTemplateRows = `repeat(${current_map.length}, minmax(0,1fr))`;
+    
+    for(let y = 0; y < current_map.length; y++) {
+        for(let x = 0; x < current_map[y].length; x++) {
+            let cell = document.createElement('div');
+            cell.className = "cell";
+            cell.id = `cell_${x}_${y}`;
+            let unitData = current_map[y][x];
+            
+            cell.title = get_tooltip(unitData);
+            cell.innerHTML = render_unit(unitData);
+            
+            cell.addEventListener('dragover', e => e.preventDefault());
+            cell.addEventListener('drop', e => {
+                e.preventDefault();
+                let dragged_id = e.dataTransfer.getData('text');
+                if(!dragged_id || unitData.type !== 'tile') return;
+                
+                let char = data.find(d => d.id === dragged_id.split('_')[1]);
+                if(char) {
+                    current_map[y][x] = char;
+                    char.on_board = 1;
+                    update_grid(); put_cards();
+                }
+            });
+            
+            cell.addEventListener('click', () => {
+                if(unitData.type === 'friend' && CP >= 1) {
+                    update_cp(-1);
+                    unitData.on_board = 0;
+                    current_map[y][x] = data[0]; 
+                    update_grid(); put_cards();
+                }
+            });
+            b.appendChild(cell);
+        }
+    }
+}
+
+function put_cards() {
+    let port = el('char_cards');
+    port.innerHTML = "";
+    data.filter(x => x.type === "friend" && x.avaliable && !x.on_board).forEach(char => {
+        let btn = document.createElement('div');
+        btn.className = "char_card";
+        btn.draggable = true;
+        btn.id = `card_${char.id}`;
+        btn.title = get_tooltip(char);
+        btn.innerHTML = render_unit(char);
+        
+        btn.addEventListener('dragstart', e => { e.dataTransfer.setData('text', e.target.id); });
+        port.appendChild(btn);
+    });
+}
+
+// --- BATTLE LOGIC (ANIMATIONS) ---
+async function end_turn() {
+    for(let y = 0; y < current_map.length; y++) {
+        for(let x = 0; x < current_map[y].length; x++) {
+            let unit = current_map[y][x];
+            if(unit.type === 'friend') {
+                let targetX = -1;
+                for(let tx = x + 1; tx < current_map[y].length; tx++) {
+                    if(current_map[y][tx].type === 'enemy') { targetX = tx; break; }
+                }
+                if(targetX !== -1) await perform_attack(unit, current_map[y][targetX], y, x, targetX, true);
+            }
+        }
+    }
+    
+    if(await check_battle_end()) return;
+
+    for(let y = 0; y < current_map.length; y++) {
+        for(let x = 0; x < current_map[y].length; x++) {
+            let unit = current_map[y][x];
+            if(unit.type === 'enemy') {
+                let targetX = -1;
+                for(let tx = x - 1; tx >= 0; tx--) {
+                    if(current_map[y][tx].type === 'friend') { targetX = tx; break; }
+                }
+                if(targetX !== -1) await perform_attack(unit, current_map[y][targetX], y, x, targetX, false);
+            }
+        }
+    }
+    await check_battle_end();
+}
+
+async function perform_attack(attacker, target, y, startX, endX, is_friend) {
+    let atk_el = el(`cell_${startX}_${y}`);
+    if(atk_el) atk_el.classList.add('anim-atk');
+    
+    let laserClass = is_friend ? 'anim-laser-right' : 'anim-laser-left';
+    let pathCells = [];
+    let step = is_friend ? 1 : -1;
+    
+    for(let px = startX + step; px !== endX; px += step) {
+        let p_el = el(`cell_${px}_${y}`);
+        if(p_el) {
+            p_el.classList.add(laserClass);
+            pathCells.push(p_el);
+        }
+    }
+    
+    await sleep(250);
+    
+    target.hp -= attacker.attack;
+    
+    if(atk_el) atk_el.classList.remove('anim-atk');
+    pathCells.forEach(c => c.classList.remove(laserClass));
+    
+    let tgt_el = el(`cell_${endX}_${y}`);
+    if(tgt_el) tgt_el.classList.add('anim-dmg');
+    
+    update_grid();
+    await sleep(200);
+    if(tgt_el) tgt_el.classList.remove('anim-dmg');
+}
+
+async function check_battle_end() {
+    let enemies_left = 0;
+    
+    for(let y = 0; y < current_map.length; y++) {
+        for(let x = 0; x < current_map[y].length; x++) {
+            let u = current_map[y][x];
+            if(u.type === 'enemy') {
+                if(u.hp <= 0) current_map[y][x] = data[0];
+                else enemies_left++;
+            }
+            if(u.type === 'friend' && u.hp <= 0) {
+                u.avaliable = 0; 
+                current_map[y][x] = data[0];
+            }
+        }
+    }
+    update_grid();
+
+    let global_friends = data.filter(d => d.type === 'friend' && d.avaliable).length;
+    if(global_friends === 0) {
+        alert("GAME OVER. All heroes have fallen.");
+        location.reload();
+        return true;
+    }
+
+    if(enemies_left === 0) {
+        SP += CP;
+        
+        if(current_level === 4) {
+            trigger_radishy_event();
+        } else if (current_level === 12) {
+            await trigger_ending();
+        } else {
+            if(dialogues[current_level]) {
+                await play_dialogue(dialogues[current_level]);
+            }
+            current_level++;
+            show_menu();
+        }
+        return true;
+    }
+    return false;
+}
+
+function trigger_radishy_event() {
+    el('battle').style.display = 'none';
+    let ov = el('overlay');
+    ov.style.display = 'flex';
+    el('story_text').innerText = "An enemy cannon fodder, Radishy Pie, surrenders and begs to join your revolt. \n\nWhat is your verdict?";
+    
+    let btns = el('event_buttons');
+    btns.style.display = 'flex';
+    btns.innerHTML = `
+        <button onclick="resolve_radishy(1)" style="font-size:20px; background:#44a641;">Accept into Ranks</button>
+        <button onclick="resolve_radishy(0)" style="font-size:20px; background:#ff3366;">Banish Permanently</button>
+    `;
+}
+
+window.resolve_radishy = async function(accept) {
+    if(accept) data.find(d => d.id === "5").avaliable = 1;
+    current_level++;
+    
+    el('overlay').style.display = 'none';
+    await play_dialogue(["Every bit of strength counts.", "Radishy, prove your loyalty."]);
+    show_menu();
+}
+
+async function trigger_ending() {
+    el('battle').style.display = 'none';
+    
+    // Cleanup any existing buttons and force display the overlay with sunrise styling
+    el('event_buttons').innerHTML = "";
+    el('event_buttons').style.display = 'none';
+    let overlay = el('overlay');
+    overlay.style.display = 'flex';
+    overlay.classList.add('sunrise-overlay'); 
+    
+    let lines = [
+        "Glovy Shatter falls to the ground.",
+        "The dark magic barriers begin to dissipate...",
+        "For the first time in years, the ponies see the sunrise."
+    ];
+    
+    el('story_text').innerText = "";
+    for(let line of lines) {
+        for(let char of line) {
+            el('story_text').innerText += char;
+            await sleep(50);
+        }
+        el('story_text').innerText += "\n\n";
+        await sleep(800);
+    }
+    await sleep(1000);
+    el('story_text').innerText += "\n\nTHANK YOU FOR PLAYING\n\nPONIES' SONG";
+}
+</script>
+</body>
+</html>
