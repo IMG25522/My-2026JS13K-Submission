@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <style>
+            body{
+                
+            /* 基础暗色背景 + 工业深灰网格纹理 + 顶层暗角光束 */
+            background-image: 
+                linear-gradient(#2a2d37 1px, transparent 1px),
+                linear-gradient(90deg, #2a2d37 1px, transparent 1px),
+                radial-gradient(circle at 50% 50%, rgba(255, 180, 50, 0.15), rgba(10, 10, 12, 0.8));
+            background-size: 40px 40px, 40px 40px, 100% 100%;
+            box-shadow: inset 0 0 50px #000;
+            height: 100vh;
+            }
+            .title{
+                font-size: 50px;
+                font-family: "Trebuchet MS","sans-serif";
+                color: #000000;
+                text-align: center
+            }
+            .start_bt{
+                border-radius: 30px 0px 30px 0px;
+                font-family: "Trebuchet MS";
+                font-size:30px;
+                position: absolute; left:20%; bottom: 20%;
+            }
+            .next_battle{
+                height: 15%;
+                aspect-ratio: 3 / 1; 
+                font-family: "Courier New", Courier, Lucida, monospace;
+                font-size: 20pt;
+                margin:10px;
+                display: flex; justify-content: right; align-items: center;
+            }
+            /* 战棋地图容器 */
+            #board {
+                display: grid;
+                gap: 4px; /* 格子之间的缝隙，相当于自带网格线 */
+                background: #c2c2c2;/* 缝隙颜色（网格线） */
+                width: 70%;
+                position: relative;
+            }
+            #board .cell {
+                aspect-ratio: 1/1;
+                container-type: inline-size;
+                overflow: auto;
+            }
+            .unit {
+                font-size: calc(100cqw / 16);
+                image-rendering: pixelated;
+            }
+            #battle{
+                justify-content: center;
+                place-items: center; 
+                flex-wrap: wrap;
+                height:100%;
+            }
+            .char_card{
+                overflow: auto;
+                container-type: inline-size;
+                display: inline-flex;
+                height:10em;
+                width:10em;
+            }
+        </style>
+        <title>SONG</title>
+    </head>
+    <body id="body" style="margin:0;padding:0;">
+        <div id="start" style="display: none;"><!-- CHANGE BACK TO BLOCK AFTER DEV-->
+            <div class="title">PONIES' SONG</div>
+            <button class="start_bt" onclick = "to_menu()"> - START - </button>
+        </div>
+        <div id="menu" style="justify-content: center;place-items: center; flex-wrap: wrap;width: 100%; height:100vh; ">
+            <!-- Manage, level up ponies, talk and select level to play-->
+            <div style="height:20%;width:100%"></div>
+            <button class="next_battle" onclick="battle_gameplay(next_battle)">NEXT BATTLE></button>
+            <div id="story_word_line" style="position:fixed; bottom:40%; font-size: 20px; color: #fff; left:20%;white-space: pre-wrap; " ></div>
+        </div>
+        <div id="battle" style="display: none;">
+            <!-- Battle part -->
+            <!-- 底层：网格（CSS Grid 或绝对定位格子） -->
+            <div id="board"></div>
+            <div id="char_cards"></div>
+            
+        </div>
+    
+
+                <script defer>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+
+MAPPINGS:
+0: Walkable blank space
+1: Polluted squares (Characters will have an effect of pollution in such squares that drop their hp by 3% each time )
+2: Barrier that cannot walk and also block distant attacks
+3: Barriers that cannot walk but distant attacks could pass through
+4: Waterbody, different characters receive different effects
+# As for units planted, they are always initially on  blank squares
+5: Enemy solider type I,  Basic near attack
+6: Enemy solider type II, Basic Distant attack
+7: Enemy solider type III, able to move faster (Near+Distant attack)
+8: Enemy solider type IV, Shield, able to immune 30% of attack
+9: Enemy boss, Stories preserved UwU
+
+*/
+let t=10;
+
+const maps = [
+    // lvl 1
+    [
+        [0,0,0,0,0,6,0],
+        [0,0,0,t,0,0,7]
+    ],
+    //lvl 2
+    [
+        [0,0,0,0,6,7],
+        [0,0,0,0,0,8],
+        [0,0,t,t,6,0],
+        [0,0,t,0,7,0]
+    ]
+]
+
+
+var data = [//Who is alive?
+    {//0
+        "type":"tile",
+        "describe":"Walkable blank space",
+        "color":["#ccc"]
+    },
+    {//1
+        "id":"1",
+        "name":"Peri",
+        "type":"friend",
+        "describe":"Peri\n Formerly a young worker in a dark facility, joined the revolt after seeing a seriously injured friend left without care.\n\nClose Attack\nAbility: Everytime Peri attacks, he has a 50% chance to deal 20% more damage.",
+        "hp":100,
+        "avaliable":1,
+        "on_board":0,
+        "far_attack":0,
+        "attack":20,
+        "special_attack":32,
+        "special_attack_name":"Steel Bolt",
+        "color":["#595959","#000","#ccc"]
+    },
+    {//2
+        "id":"2",
+        "name":"Blue the Deep",
+        "type":"friend",
+        "describe":"Blue the Deep\nFormerly a police officer, joined the group after experiencing the cruel punishments to the lower class.\n\nClose Attack\nAbility: Everytime Blue the Deep is attacked, he has a 80% chance to block 40% of the damage, he can also block 20% of the damage for the friends on the same column.",
+        "hp":140,
+        "avaliable":1,
+        "on_board":0,
+        "far_attack":0,
+        "attack":12,
+        "special_attack":25,
+        "special_attack_name":"Shield of Will",
+        "color":["#1d349b","#000","#fff"]
+    },
+    {//3
+        "id":"3",
+        "name":"Kim Dash",
+        "type":"friend",
+        "describe":"Kim Dash\nA student who act great in school, joined the revolt after her dream of having a decent job got runied by the unicorns with power.\n\nDistant Attack\nAbility: Kim Dash can cancel out the chance of miss of the friend units in the same row.",
+        "hp":80,
+        "avaliable":1,
+        "on_board":0,
+        "far_attack":1,
+        "attack":15,
+        "special_attack":30,
+        "special_attack_name":"Arrows of Anger",
+        "color":["#fc0","#006f10","#297aac"]
+    },
+    {//4
+        "id":"4",
+        "name":"Leafy Green",
+        "type":"friend",
+        "describe":"Leafy Green\nAfter her father died in a industrial accident that could be prevented but ignored, she joined the revenge.\n\nDistant Attack\nAbility: Leafy Green can heal 10% of the hp of the friend units in the 3x3 grid around her each round.",
+        "hp":65,
+        "avaliable":1,
+        "on_board":0,
+        "far_attack":0,
+        "attack":10,
+        "special_attack":20,
+        "special_attack_name":"Leaf Dart",
+        "color":["#4a6b4e","#0072ff","#44a641"]
+    },
+    {//5
+        "id":"5",
+        "name":"Radishy Pie",
+        "type":"friend",
+        "describe":"Radishy Pie\nA cannon fodder of your enemy. Luckily you saved his life, he is trying to be more helpful now.\n\nClose Attack\nAbility: Radishy Pie will have a 50% chance to deal 20% more damage when he attacks with a friend in the same column.",
+        "hp":60,
+        "avaliable":0,
+        "on_board":0,
+        "far_attack":1,
+        "attack":10,
+        "special_attack":20,
+        "special_attack_name":"Radish Squash",
+        "color":["#aaa","#000","#555"]
+    },
+    {//6
+        "id":"6",
+        "name":"Enemy Solider",
+        "type":"enemy",
+        "describe":"Attacks units right in front of self",
+        "hp":30,
+        "attack":10,
+        "color":["#000","#f0f","#f0f"]
+    },
+    {//7
+        "id":"7",
+        "name":"Enemy Distant Solider",
+        "type":"enemy",
+        "describe":"Attacks units in distant",
+        "hp":25,
+        "attack":10,
+        "color":["#000","#fa0","#fa0"]
+    },
+    {//8
+        "id":"8",
+        "name":"Enemy Solider II",
+        "type":"enemy",
+        "describe":"Attacks units right in front of self",
+        "hp":45,
+        "attack":20,
+        "color":["#f0f","#000","#000"]
+    },
+    {//9
+        "id":"9",
+        "name":"Glovy Shatter",
+        "type":"enemy",
+        "describe":"A cruel ruler as you know... there are some hidden stories, maybe.",
+        "hp":200,
+        "attack":40,
+        "color":["#fff","#a900ff","#0004ff"]
+    },
+    {//10
+        "type":"tile",
+        "describe":"blocked tile, cannot walk through",
+        "color":["#000"]
+    }
+]
+var friends;
+
+
+const W = window.innerWidth;
+const H = window.innerHeight;
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+var front_pony = document.getElementById("front_pony");
+var front_pony_face = document.getElementById("front_pony_face");
+var start = document.getElementById("start");
+var menu = document.getElementById("menu");
+var battle = document.getElementById("battle");
+var story_word_line = document.getElementById("story_word_line");
+var next_battle = 0
+var board = document.getElementById("board");
+var card_port = document.getElementById("char_cards");
+var parser = new DOMParser();
+
+
+function to_menu(){
+    start.style.display = "none";
+    menu.style.display = "block";
+    body.style.background="#000";
+    load_starter_story();
+}
+
+async function load_starter_story(){
+    console.log("LOAD!");
+    await load_each_char(story_word_line,"When the Unicorns become the rulers with their magic,",100);
+    console.log("LOAD!");
+    await load_each_char(story_word_line,"When they trample on the lives of the normal ponies who don't have magic,",100);
+    console.log("LOAD!");
+    await load_each_char(story_word_line,"It's time to revolt.",100,1000);
+    story_word_line.innerText = "";
+    body.style.background=bgc;
+}
+async function load_each_char(entry,final,waiteach,wait=500){
+    entry.innerText = ""
+    for(let i = 0; i<final.length; i++){
+        entry.innerText += final[i];
+        await sleep(waiteach);
+    }
+    await sleep(wait);
+}
+
+
+function battle_gameplay(num){
+    map = maps[num];
+    for(let y = 0; y<map.length;y++){
+        for(let x=0; x<map[y].length;x++){
+            map[y][x] = data[map[y][x]];
+        }
+    }
+    menu.style.display = "none";
+    battle.style.display = "block";
+    put_cards();
+    update_grid(map);
+
+}
+
+function is_in_same_column(pos1,pos2){
+    if(pos1[1] == pos2[1]){
+        return 1;
+    }
+    return 0;
+}
+
+function is_in_same_row(pos1,pos2){
+    if(pos1[0] == pos2[0]){
+        return 1;
+    }
+    return 0;
+}
+
+function attack(amount,from,target){
+    target["hp"] -= amount;
+    if(target["id"] == "2"){//Blue the Deep
+        if(Math.random()>0.8){
+            target["hp"] += 0.4*amount;
+        }
+    }
+    if(target[""]){}
+}
+
+function battle_round(map){
+    for(let y = 0; y<map.length;y++){
+        for(let x=0; x<map[y].length;x++){
+            if(map[y][x]["id"] == "1"){//Peri
+                
+            }else
+            if(map[y][x]["id"] == "2"){
+
+            }else
+            if(map[y]["id"] == "1"){
+
+            }else
+            if(map[y]["id"] == "1"){
+
+            }else
+            if(map[y]["id"] == "1"){
+
+            }
+        }
+    }
+}
+
+function update_grid(map=[]){
+    board.innerHTML = "";
+    board.style.gridTemplateColumns = `repeat(${map[0].length},minmax(0,1fr))`;
+    board.style.gridTemplateRows = `repeat(${map.length},minmax(0,1fr))`;
+    for(let y = 0; y<map.length;y++){
+        for(let x = 0; x<map[y].length;x++){
+            let cell = document.createElement('div');
+            cell.className = "cell"
+            cell.id=`cell_${x}_${y}`
+            cell.innerHTML = render_unit(map[y][x]);
+            cell.addEventListener('dragover', (event) => {
+                event.preventDefault(); // 关键：允许在这个元素上释放拖拽
+            });
+            cell.addEventListener('drop', (event) => {
+                event.preventDefault();
+                
+                let event_data = event.dataTransfer.getData('text/plain');
+                let draggedElement = document.getElementById(event_data);
+                let char_data_index = Number(draggedElement.id.split("_")[1])
+                map[y][x] = data[char_data_index];
+                update_grid(map)
+                data[char_data_index]["on_board"] = 1;
+                put_cards();
+                //dropZone.appendChild(draggedElement);
+            });
+            board.appendChild(cell);
+        }
+    }
+}
+
+function put_cards(){
+    card_port.innerHTML = ""
+    friends = data.filter(x => (x["type"] === "friend" && x["avaliable"]));
+    for(let i = 0; i<friends.length; i++){
+        if(!friends[i]["on_board"]){
+            put_card(i+1);
+        }
+    }
+}
+function put_card(index){
+    let inside = render_unit(data[index]);
+    card = `<button class="char_card" title="${data[index]["describe"]}" draggable="true" id="card_${index}">${inside}</button>`
+    card_port.innerHTML += card;
+}
+
+card_port.addEventListener('dragstart', (event) => {
+    if (event.target.classList.contains('char_card')) {
+        event.dataTransfer.setData('text/plain', event.target.id);
+    }
+});
+
+
+
+const friend_sheet = [
+  "0",
+  "000000001",
+  "000000000111",
+  "0000000001211",
+  "0000000031111",
+  "000000003111",
+  "000000033111",
+  "000111111111",
+  "001111111111",
+  "010111111111",
+  "100110000011",
+  "000110000011",
+  "000110000011",
+  "000110000011"
+];
+const enemy_sheet = [
+  "000003",
+  "00000301",
+  "0000111",
+  "0011121",
+  "00111113",
+  "00001113",
+  "000011111111",
+  "0000111111111",
+  "00001111111111",
+  "000011111111101",
+  "0000110000011001",
+  "0000110000011",
+  "0000110000011",
+  "0000110000011",
+  "0000110000011"
+]
+
+// 将数据转为 CSS box-shadow 字符串
+function render_unit(data_item) {
+  let colors = data_item["color"];
+  let shadows = [];
+  let spriteData = data_item["type"] === "friend" ? friend_sheet : enemy_sheet;
+  spriteData = data_item["type"] === "tile" ? Array(16).fill("1".repeat(16)) : spriteData; 
+  for (let y = 0; y < spriteData.length; y++) {
+    for (let x = 0; x < spriteData[y].length; x++) {
+      let colorIndex = spriteData[y][x];
+      if (colorIndex !== '0') {
+        // 拼接像素偏移坐标与颜色
+        shadows.push(`${x}em ${y}em ${colors[Number(colorIndex)-1]}`);
+      }
+    }
+  }
+  // 返回一个div
+  return `<div class="unit" style="width:1em;height:1em;box-shadow:${shadows.join(',')};"></div>`;
+}
+
+
+
+
+
+
+
+
+        </script>
+    </body>
+</html>
